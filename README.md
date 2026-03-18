@@ -1,133 +1,54 @@
 [![Compile Handler](https://github.com/himbeles/mac-device-connect-daemon/actions/workflows/compile.yml/badge.svg)](https://github.com/himbeles/mac-device-connect-daemon/actions/workflows/compile.yml)
 
-# Run shell script or executable triggered by device detection on a Mac
+# Auto-connect iPad Sidecar on USB plug-in
+
+Automatically launches [Sidecar](https://support.apple.com/en-us/HT210380) when an iPad is connected via USB, using [sidecarlauncher](https://github.com/drdayalpatel/sidecarlauncher). Supports multiple iPads — the correct device is identified by USB serial number so no spurious connection attempts or error popups occur.
+
+This is a fork of [himbeles/mac-device-connect-daemon](https://github.com/himbeles/mac-device-connect-daemon), which uses Apple's `IOKit` library and a LaunchAgent to run a shell script triggered by USB device connection.
 
 ---
 
-✨ **UPDATE** ✨: I have wrapped the functionality of the Launch Daemon described below in a **more user-friendly Mac app, called ["Stecker"](https://stecker.himbeles.de)**. In addition to device attachment, the app can also detect device detachment. It triggers the execution of selected Shortcuts from the macOS Shortcuts App. 
+## Requirements
 
-<p align="center" style="padding: 10px">
-<a href="https://stecker.himbeles.de">
-<img src="https://stecker.himbeles.de/icon.png" 
-    alt="Stecker App" 
-    style="width: 160px;">
-</img>
-</a>
-</p>
-
-<p align="center" style="padding: 10px">
-<a href="https://apps.apple.com/us/app/stecker/id6447288587">
-<img src="https://tools.applemediaservices.com/api/badges/download-on-the-mac-app-store/black/en-us?size=250x83&amp;releaseDate=1437004800" 
-    alt="Download on the Mac App Store" 
-    style="width: 160px;">
-</a>
-</p>
-
-The app is very lightweight and relies only on `IOKit` notifications.
-In contrast to the launch daemon below, the direct use of the the `IOKit` framework permits to filter for additional types of `com.apple.iokit.matching` events.
+- [sidecarlauncher](https://github.com/drdayalpatel/sidecarlauncher) installed at `/usr/local/bin/sidecarlauncher`
+- `handle-xpc-event-stream` binary — download the latest build artifact from the [Compile Handler action](https://github.com/himbeles/mac-device-connect-daemon/actions/workflows/compile.yml) or build it yourself:
+  ```sh
+  swift build --configuration release --package-path XPCEventStreamHandler --arch arm64 --arch x86_64
+  cp ./XPCEventStreamHandler/.build/apple/Products/Release/handle-xpc-event-stream /usr/local/bin/
+  ```
 
 ---
 
-This tutorial describes how to run an arbitrary executable or shell script triggered by the connection of an external device (usb/thunderbolt) to a Mac.
+## Setup
 
-This relies on Apple's `IOKit` library for device detection and a daemon for running the desired executable.
-See BSD man page on `xpc_events`:
+**1. Find your iPad's USB serial number** — plug it in and run:
 ```sh
-man xpc_events
+ioreg -p IOUSB -l -n "iPad" | grep '"USB Serial Number"'
 ```
 
-For the daemon to not be triggered repeatedly after connecting the device, a special stream handler (created by [Ford Parsons](https://github.com/snosrap/xpc_set_event_stream_handler/blob/master/xpc_set_event_stream_handler/main.m)) is used to "consume" the `com.apple.iokit.matching` event, as explained [here](https://github.com/snosrap/xpc_set_event_stream_handler).
-
-For example, this can be used to spoof the MAC address of an ethernet adapter when it is connected to the Mac.
-The setup is explained using the MAC spoofing scenario example files in [example/spoof-MAC](example/spoof-MAC) but can be generalized to arbitrary executables and devices.
-
-
-## Put your shell script or executable into place
-
-Adapt the shell script `spoofmac.sh` to your needs and
-make it executable:
-
-```
-sudo chmod 755 spoofmac.sh
-```
-
-Then move it into `/usr/local/bin`, or some other directory:
-
-```
-cp spoofmac.sh /usr/local/bin/
-```
-
-## Building the XPC event stream handler
-
-The XPC event stream handler does not need to be adapted to your use case and can be built on a Mac (with XCode installed) as a universal binary: 
-
-```
-swift build --configuration release --package-path XPCEventStreamHandler --arch arm64 --arch x86_64
-```
-
-Let's place the build product `handle-xpc-event-stream` into `/usr/local/bin`, like the main executable for the daemon.
-
-```
-cp -f ./XPCEventStreamHandler/.build/apple/Products/Release/handle-xpc-event-stream /usr/local/bin/handle-xpc-event-stream
-```
-
-The stream handler is also compiled via a [Github Action](https://github.com/himbeles/mac-device-connect-daemon/actions?query=workflow%3A%22Compile+Handler%22) on every commit. 
-This uses a Github `macos-latest` machine. 
-Instead of building manually, you may download the build artifact.
-
-
-## Setup the daemon
-
-The plist file `com.spoofmac.plist` contains the properties of the daemon that will run the executable on device connect trigger.
-
-It contains information for identifying the device you want to base your trigger on, like `idVendor`, `idProduct`, `IOProviderClass`. 
-Get them via the output of
+**2. Create the config file** at `~/.config/sidecar-devices`, with one entry per iPad:
 ```sh
-ioreg -p IOProviderClass -l
+YOUR_SERIAL_HERE=Your iPad Pro
+YOUR_SERIAL_HERE=Your iPad mini
+YOUR_SERIAL_HERE=Your iPad Air
 ```
-where `<IOProviderClass>` should be either `IOPCI` (Thunderbolt) or `IOUSB` (USB).
+Use the exact device name that `sidecarlauncher devices` reports.
 
-The identifiers can also be obtained from the `System Information` App on your Mac.
-
-![Screenshot System Information](example/spoof-MAC/screenshot-system-info.png)
-
-Convert the hex identifiers to integers before inserting into the plist file (for example using `int(0x8086)` in python).
-
-`IOProviderClass` should be either `IOPCIDevice` (Thunderbolt) or `IOUSBDevice` (USB).
-
-The other relevant entry in the plist file is the location of `handle-xpc-event-stream` and the executable.
-
-Other entries include the location of standard output (log) files and the executing user.
-
-
-Since MAC spoofing requires root privileges, we put `com.spoofmac.plist` into `/Library/LaunchDaemons`:
-
-```
-cp com.spoofmac.plist /Library/LaunchDaemons/
+**3. Install the script and LaunchAgent:**
+```sh
+sudo cp example/sidecar-ipad/sidecar-ipad.sh /usr/local/bin/
+sudo chmod +x /usr/local/bin/sidecar-ipad.sh
+cp example/sidecar-ipad/com.sidecaripad.plist ~/Library/LaunchAgents/
 ```
 
-not into a `LaunchAgents` folder. Launch agents ignore the `UserName` argument.
-
-Insure that the owner of the file is `root`:
-
-```
-sudo chown root:wheel /Library/LaunchDaemons/com.spoofmac.plist
+**4. Load the LaunchAgent:**
+```sh
+launchctl load ~/Library/LaunchAgents/com.sidecaripad.plist
 ```
 
-## Launch the daemon
+Plug in your iPad — Sidecar will start automatically.
 
-Activate the daemon:
-
+To unload:
+```sh
+launchctl unload ~/Library/LaunchAgents/com.sidecaripad.plist
 ```
-launchctl load /Library/LaunchDaemons/com.spoofmac.plist
-```
-
-and you are good to go.
-
-
-Unloading is done using `launchctl unload`.
-
-## Support me
-If you like this tutorial and code and you would like to support me,
-
-<a href="https://www.buymeacoffee.com/lri" target="_blank"><img width="120" src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee"></a>

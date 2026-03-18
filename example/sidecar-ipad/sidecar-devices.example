@@ -1,0 +1,8 @@
+# ~/.config/sidecar-devices
+# Maps USB serial numbers to sidecarlauncher device names.
+# One entry per iPad. To find a device's serial, plug it in and run:
+#   ioreg -p IOUSB -l -n "iPad" | grep '"USB Serial Number"'
+
+# YOUR_SERIAL_HERE=Your iPad Pro
+# YOUR_SERIAL_HERE=Your iPad mini
+# YOUR_SERIAL_HERE=Your iPad Air

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.sidecaripad</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/sidecaripad.stdout</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/sidecaripad.stderr</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/handle-xpc-event-stream</string>
+		<string>/usr/local/bin/sidecar-ipad.sh</string>
+	</array>
+	<key>LaunchEvents</key>
+	<dict>
+		<key>com.apple.iokit.matching</key>
+		<dict>
+			<key>com.apple.device-attach</key>
+			<dict>
+				<!-- Apple vendor ID: 0x05AC = 1452 -->
+				<key>idVendor</key>
+				<integer>1452</integer>
+				<!-- No idProduct filter: fires for any Apple USB device.
+				     The script identifies the correct iPad by matching its USB
+				     serial number (via ioreg) against ~/.config/sidecar-devices
+				     and connects only to that device. -->
+				<key>IOProviderClass</key>
+				<string>IOUSBHostDevice</string>
+				<key>IOMatchLaunchStream</key>
+				<true/>
+				<key>IOMatchStream</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>
